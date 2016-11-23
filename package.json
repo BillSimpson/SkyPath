@@ -1,0 +1,38 @@
+{
+    "author": "w.r.simpson@gmail.com",
+    "dependencies": {},
+    "keywords": [],
+    "name": "skypath",
+    "pebble": {
+        "capabilities": [
+            "location"
+        ],
+        "displayName": "SkyPath",
+        "enableMultiJS": true,
+        "messageKeys": [],
+        "projectType": "native",
+        "resources": {
+            "media": [
+                {
+                    "file": "images/background.png",
+                    "name": "IMAGE_BACKGROUND",
+                    "targetPlatforms": null,
+                    "type": "bitmap"
+                }
+            ]
+        },
+        "sdkVersion": "3",
+        "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "emery"
+        ],
+        "uuid": "7e9fb890-5789-4283-abc4-55566c45a98a",
+        "watchapp": {
+            "watchface": true
+        }
+    },
+    "version": "1.0.0"
+}
