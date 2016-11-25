@@ -13,11 +13,13 @@ static GBitmap *s_bitmap_sun_rim;
 static GBitmap *s_bitmap_horizon;
 
 // Global variables
-float solar_elev[] = { -14, -12, -9, -6, -3, 0, 3, 6, 8, 10, 12, 13, 14, 14, 13, 12, 10, 8, 6, 3, 0, -3, -6, -9, -12, -14 };
-float lunar_elev[] = { 0, 9, 18, 24, 30, 36, 39, 42, 43, 39, 36, 30, 24, 18, 9, 0, -3, -6, -9, -12, -14, -14, -12, -9, -6, -3 };
-float lunar_azi_hour[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24};
 float graph_width, graph_height;
 float curr_solar_elev;
+
+float solar_elev[] = {-45.4,-45.6,-43.7,-39.8,-34.7,-28.7,-22.4,-16.1,-10.1,-4.9,-0.5,2.5,4.2,4.4,2.9,0.1,-4,-9.2,-15,-21.3,-27.7,-33.8,-39.1,-43.3,-45.6};
+float solar_azi[] = {348.2,8.3,27.8,46,62.4,77.4,91.2,104.5,117.6,130.7,144.1,157.7,171.7,185.8,199.7,213.5,226.9,240,253.1,266.3,280,294.7,310.8,328.7,348.1};
+float lunar_elev[] = {-17.6,-12.7,-7.1,-1.1,4.6,10.2,15.2,19.2,22,23.1,22.6,20.4,16.8,12,6.5,0.6,-5.7,-11.8,-17.5,-22.4,-26.1,-28.2,-28.7,-27.3,-24.3};
+float lunar_azi[] = {47.9,62.2,75.8,89.1,102.4,115.9,129.9,144.5,159.8,175.5,191.3,206.8,221.6,235.8,249.4,262.6,275.7,289.1,302.9,317.5,333,349.3,5.9,22.3,38.2};
 
 static void update_time() {
   // Get a tm structure
@@ -83,7 +85,7 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
   }
   // Draw lunar path
     for (i=0;i<24;i++) {
-    dot = GPoint(hour_to_xpixel(lunar_azi_hour[i]),angle_to_ypixel(lunar_elev[i]));
+    dot = GPoint(hour_to_xpixel(lunar_azi[i]/15),angle_to_ypixel(lunar_elev[i]));
     if (lunar_elev[i]>0) graphics_draw_pixel(ctx, dot);
   }
   
@@ -187,7 +189,6 @@ static void init() {
   // load bitmaps
   s_bitmap_sun_rim = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_SUN_RIM);
   s_bitmap_horizon = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_HORIZON);
-
 }
 
 static void deinit() {
