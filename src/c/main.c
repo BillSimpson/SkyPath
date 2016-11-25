@@ -16,10 +16,213 @@ static GBitmap *s_bitmap_horizon;
 float graph_width, graph_height;
 float curr_solar_elev;
 
-float solar_elev[] = {-45.4,-45.6,-43.7,-39.8,-34.7,-28.7,-22.4,-16.1,-10.1,-4.9,-0.5,2.5,4.2,4.4,2.9,0.1,-4,-9.2,-15,-21.3,-27.7,-33.8,-39.1,-43.3,-45.6};
-float solar_azi[] = {348.2,8.3,27.8,46,62.4,77.4,91.2,104.5,117.6,130.7,144.1,157.7,171.7,185.8,199.7,213.5,226.9,240,253.1,266.3,280,294.7,310.8,328.7,348.1};
-float lunar_elev[] = {-17.6,-12.7,-7.1,-1.1,4.6,10.2,15.2,19.2,22,23.1,22.6,20.4,16.8,12,6.5,0.6,-5.7,-11.8,-17.5,-22.4,-26.1,-28.2,-28.7,-27.3,-24.3};
-float lunar_azi[] = {47.9,62.2,75.8,89.1,102.4,115.9,129.9,144.5,159.8,175.5,191.3,206.8,221.6,235.8,249.4,262.6,275.7,289.1,302.9,317.5,333,349.3,5.9,22.3,38.2};
+//
+// Adapted from the javascript code below to C
+//
+// https://github.com/mourner/suncalc/blob/master/suncalc.js
+//
+//
+// (c) 2011-2015, Vladimir Agafonkin
+// SunCalc is a JavaScript library for calculating sun/moon position and light phases.
+// https://github.com/mourner/suncalc
+//
+#include <stdio.h>
+#include <math.h>
+#include <time.h>  
+
+// sun calculations are based on http://aa.quae.nl/en/reken/zonpositie.html formulas
+
+// date/time constants and conversions
+
+float pi = 3.14159268;
+float rad = 3.14159268 / 180;
+float daySecs = 60 * 60 * 24;
+time_t J2000 = 946684800; // year 2000 in unix time
+float deg_conv = 180 / 3.14159268;
+
+float sin_pebble(float angle_radians) {
+  int32_t angle_pebble = angle_radians * TRIG_MAX_ANGLE / (2*pi);
+//  APP_LOG(APP_LOG_LEVEL_DEBUG, "Sin argument angle_pebble = %ld", angle_pebble);
+//  APP_LOG(APP_LOG_LEVEL_DEBUG, "Sin lookup value = %ld", sin_lookup(angle_pebble));
+//  APP_LOG(APP_LOG_LEVEL_DEBUG, "Sin result * 100 %d", (int)(100*(float)sin_lookup(angle_pebble) / (float)TRIG_MAX_RATIO));
+  return ((float)(sin_lookup(angle_pebble)) / (float)TRIG_MAX_RATIO);
+}
+
+float asin_pebble(float angle_radians) {
+  return (angle_radians);  // use small angle formula.
+}
+
+float cos_pebble(float angle_radians) {
+  int32_t angle_pebble = angle_radians * TRIG_MAX_ANGLE / (2*pi);
+  return ((float)cos_lookup(angle_pebble) / (float)TRIG_MAX_RATIO);
+}
+
+float atan2_pebble(float y, float x) {
+  if (x>2) APP_LOG(APP_LOG_LEVEL_DEBUG, "atan2: X too large, 100 x value = %d", (int)x);
+  if (y>2) APP_LOG(APP_LOG_LEVEL_DEBUG, "atan2: Y too large, 100 x value = %d", (int)y);
+  int16_t y_pebble = (int16_t) (8192 * y ); 
+  int16_t x_pebble = (int16_t) (8192 * x ); 
+  return (2*pi * (float)atan2_lookup(y_pebble, x_pebble) / (float)TRIG_MAX_ANGLE);
+}
+
+float fmod_pebble(float a, float d) {
+  float remainder;
+  remainder = a;
+  while ( remainder > d ) {
+    remainder = remainder - d;
+  }
+  return remainder;
+}
+
+float toDays(time_t unixdate) {
+  return ((float)(unixdate-J2000) / daySecs -0.5);
+}
+
+// general calculations for position
+
+float e = 3.14159268 / 180 * 23.4397; // obliquity of the Earth
+
+float rightAscension(float l, float b) {
+  return atan2_pebble(sin_pebble(l) * cos_pebble(e) - sin_pebble(b)/cos_pebble(b) * sin_pebble(e), cos_pebble(l));
+}
+
+float declination(float l, float b) { 
+  return (asin_pebble(sin_pebble(b) * cos_pebble(e) + cos_pebble(b) * sin_pebble(e) * sin_pebble(l)));
+}
+
+float azimuth(float H, float phi, float dec) {
+  return (atan2_pebble(sin_pebble(H), cos_pebble(H) * sin_pebble(phi) - sin_pebble(dec)/cos_pebble(dec) * cos_pebble(phi)));
+}
+
+float altitude(float H, float phi, float dec) { 
+  return (asin_pebble(sin_pebble(phi) * sin_pebble(dec) + cos_pebble(phi) * cos_pebble(dec) * cos_pebble(H))); 
+}
+
+float siderealTime(float d, float lw) { 
+  return (rad * (280.16 + 360.9856235 * d) - lw);
+}
+
+// general sun calculations
+
+float solarMeanAnomaly(float d) { 
+  return (rad * (357.5291 + 0.98560028 * d)); 
+}
+
+float eclipticLongitude(float M) {
+  float C = rad * (1.9148 * sin_pebble(M) + 0.02 * sin_pebble(2 * M) + 0.0003 * sin_pebble(3 * M)); // equation of center
+  float P = rad * 102.9372; // perihelion of the Earth
+  return (M + C + P + pi);
+}
+
+void sunCoords(float d, float *dec, float *ra) {
+
+  float M = solarMeanAnomaly(d);
+  float L = eclipticLongitude(M);
+
+  *dec = declination(L, 0);
+  *ra = rightAscension(L, 0);
+}
+
+void sunPosition(time_t unixdate, float lat, float lng, float *azi, float *alt) {
+// calculates sun position for a given date and latitude/longitude
+
+  float lw  = rad * -lng;
+  float phi = rad * lat;
+  float d = toDays(unixdate);
+
+  float dec, ra;
+  sunCoords(d, &dec, &ra);
+  float H  = siderealTime(d, lw) - ra;
+
+  *azi = azimuth(H, phi, dec);
+  *alt = altitude(H, phi, dec);
+};
+
+// moon calculations, based on http://aa.quae.nl/en/reken/hemelpositie.html formulas
+
+void moonCoords(float d, float *ra, float *dec) { 
+// geocentric ecliptic coordinates of the moon
+
+  float L = rad * (218.316 + 13.176396 * d); // ecliptic longitude
+  float M = rad * (134.963 + 13.064993 * d); // mean anomaly
+  float F = rad * (93.272 + 13.229350 * d);  // mean distance
+
+  float l  = L + rad * 6.289 * sin_pebble(M); // longitude
+  float b  = rad * 5.128 * sin_pebble(F);     // latitude
+
+  *ra = rightAscension(l, b);
+  *dec = declination(l, b);
+}
+
+void moonPosition(time_t unixdate, float lat, float lng, float *azi, float *alt) {
+  float lw  = rad * -lng;
+  float phi = rad * lat;
+  float d = toDays(unixdate);
+
+  float ra, dec;
+  moonCoords(d, &ra, &dec);
+  float H = siderealTime(d, lw) - ra;
+  float h = altitude(H, phi, dec);
+// formula 14.1 of "Astronomical Algorithms" 2nd edition by Jean Meeus (Willmann-Bell, Richmond) 1998.
+
+  *azi = azimuth(H, phi, dec);
+  *alt = h;
+};
+
+
+// calculations for illumination parameters of the moon,
+// based on http://idlastro.gsfc.nasa.gov/ftp/pro/astro/mphase.pro formulas and
+// Chapter 48 of "Astronomical Algorithms" 2nd edition by Jean Meeus (Willmann-Bell, Richmond) 1998.
+
+float moonPhase(time_t unixdate) {
+  float d = toDays(unixdate);
+  float s_ra, s_dec, m_ra, m_dec;
+  sunCoords(d, &s_ra, &s_dec);
+  moonCoords(d, &m_ra, &m_dec);
+
+  float phase_angle = (m_ra-s_ra);
+  if (phase_angle < 0) phase_angle = phase_angle + 2*pi;
+  return fmod_pebble(phase_angle/(2*pi),1);
+}
+
+void sky_paths_today(float lat, float lng, float solar_elev[], float solar_azi[], float lunar_elev[], float lunar_azi[], float lunar_phase[]) {
+  float sol_alt, sol_azi, moon_alt, moon_azi;
+  int i;
+  
+  // get today's date in local time  
+  time_t temp = time(NULL);
+  struct tm *curr_time = localtime(&temp);
+  // set hour, minute, and second to 0, so that we'll calculate hourly
+  curr_time->tm_min = 0;
+  curr_time->tm_sec = 0;
+  curr_time->tm_hour = 0;
+  temp = mktime(curr_time);
+
+  // cycle through 700 hours calculating solar and lunar parameters
+  for (i=0;i<25;i++) {
+    // Solar calculation
+    sunPosition(temp, lat, lng, &sol_azi, &sol_alt);
+    solar_elev[i] = sol_alt * deg_conv;
+    solar_azi[i] = fmod_pebble(((sol_azi + pi) * deg_conv ),360);
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "hour %d Solar: Elev %d  Azi %d", i, (int)solar_elev[i], (int)solar_azi[i]);
+
+    // Lunar calculation
+    moonPosition(temp, lat, lng, &moon_azi, &moon_alt);
+    lunar_elev[i] = moon_alt * deg_conv;
+    lunar_azi[i] = fmod_pebble(((moon_azi + pi) * deg_conv ),360);
+    lunar_phase[i] = moonPhase(temp);
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "       Lunar: Elev %d  Azi %d", (int)lunar_elev[i], (int)lunar_azi[i]);
+
+    // advance to the next hour
+    temp = temp + 3600;
+  }
+}
+
+float solar_elev[25];
+float solar_azi[25];
+float lunar_elev[25];
+float lunar_azi[25];
+float lunar_phase[25];
 
 static void update_time() {
   // Get a tm structure
@@ -38,8 +241,8 @@ static void update_time() {
   
   // Update the date text  
   strftime(s_date_buffer, sizeof(s_date_buffer), "%Y-%b-%e", tick_time);
+//  snprintf(s_date_buffer, sizeof(s_date_buffer), "Sol El %d", (int)curr_solar_elev);
   text_layer_set_text(s_date_layer, s_date_buffer);
-  
 }
 
 static void tick_handler(struct tm *tick_time, TimeUnits units_changed) {
@@ -52,8 +255,8 @@ int hour_to_xpixel (float hour) {
 }
 
 int angle_to_ypixel (float angle) {
-  // vertical = 110 degrees, with 90 on top, -20 at bottom
-  return (int)((90-angle)/110 * graph_height);
+  // vertical = 65 degrees, with 50 on top, -15 at bottom
+  return (int)((50-angle)/65 * graph_height);
 }
 
 static void canvas_update_proc(Layer *layer, GContext *ctx) {
@@ -189,6 +392,9 @@ static void init() {
   // load bitmaps
   s_bitmap_sun_rim = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_SUN_RIM);
   s_bitmap_horizon = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_HORIZON);
+  
+  // calculate sun paths
+  sky_paths_today(64.8, -147, solar_elev, solar_azi, lunar_elev, lunar_azi, lunar_phase);
 }
 
 static void deinit() {
