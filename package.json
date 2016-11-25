@@ -14,8 +14,14 @@
         "resources": {
             "media": [
                 {
-                    "file": "images/background.png",
-                    "name": "IMAGE_BACKGROUND",
+                    "file": "images/horizon.png",
+                    "name": "IMAGE_HORIZON",
+                    "targetPlatforms": null,
+                    "type": "bitmap"
+                },
+                {
+                    "file": "images/sun_rim.png",
+                    "name": "IMAGE_SUN_RIM",
                     "targetPlatforms": null,
                     "type": "bitmap"
                 }
