@@ -14,6 +14,60 @@
         "resources": {
             "media": [
                 {
+                    "file": "images/moon9.png",
+                    "name": "IMAGE_MOON9",
+                    "targetPlatforms": null,
+                    "type": "bitmap"
+                },
+                {
+                    "file": "images/moon8.png",
+                    "name": "IMAGE_MOON8",
+                    "targetPlatforms": null,
+                    "type": "bitmap"
+                },
+                {
+                    "file": "images/moon7.png",
+                    "name": "IMAGE_MOON7",
+                    "targetPlatforms": null,
+                    "type": "bitmap"
+                },
+                {
+                    "file": "images/moon6.png",
+                    "name": "IMAGE_MOON6",
+                    "targetPlatforms": null,
+                    "type": "bitmap"
+                },
+                {
+                    "file": "images/moon5.png",
+                    "name": "IMAGE_MOON5",
+                    "targetPlatforms": null,
+                    "type": "bitmap"
+                },
+                {
+                    "file": "images/moon4.png",
+                    "name": "IMAGE_MOON4",
+                    "targetPlatforms": null,
+                    "type": "bitmap"
+                },
+                {
+                    "file": "images/moon3.png",
+                    "name": "IMAGE_MOON3",
+                    "targetPlatforms": null,
+                    "type": "bitmap"
+                },
+                {
+                    "file": "images/moon2.png",
+                    "name": "IMAGE_MOON2",
+                    "targetPlatforms": null,
+                    "type": "bitmap"
+                },
+                {
+                    "file": "images/moon1.png",
+                    "name": "IMAGE_MOON1",
+                    "targetPlatforms": null,
+                    "type": "bitmap"
+                },
+                {
                     "file": "images/horizon.png",
                     "name": "IMAGE_HORIZON",
                     "targetPlatforms": null,
