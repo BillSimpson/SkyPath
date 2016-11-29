@@ -10,7 +10,7 @@ static TextLayer *s_info_layer;
 // set up canvas layer for drawing
 static Layer *s_canvas_layer;
 // set up sun bitmaps
-static GBitmap *s_bitmap_sun_rim;
+static GBitmap *s_bitmap_sun;
 static GBitmap *s_bitmap_horizon;
 static GBitmap *s_bitmap_moon;
 
@@ -22,7 +22,19 @@ static float solar_azi[25];
 static float lunar_elev[25];
 static float lunar_azi[25];
 static int lunar_day;
-static float lat = 64.8, lng = -147;
+
+// Persistent storage key
+#define SETTINGS_KEY 1
+
+// Define our settings struct
+typedef struct ClaySettings {
+  float Latitude;
+  float Longitude;
+  bool ShowInfo;
+} ClaySettings;
+
+// An instance of the struct
+static ClaySettings settings;
 
 //
 // Adapted from the javascript code below to C
@@ -179,12 +191,11 @@ void moonPosition(time_t unixdate, float lat, float lng, float *azi, float *alt)
 
 int moonPhase(time_t unixdate) {
   float d = toDays(unixdate);
-  // 2015-Jan-01 had an 11-day old moon
-  // 2015-Jan-01 was 1420070400 seconds (unix time)
+  // 2016-Nov-29 12:19:25 UTC was a new moon
+  // 2016-Nov-29 12:19:25 UTC 1480421975 seconds (unix time)
   // and from earlier, "d" has zero at 946684800 seconds, so 
-  // the "d" value of 2015-Jan-01 = 5479, so there was a new moon 11 days earlier
-  // We start with the new moon on d=5468
-  return ((int)fmod_pebble((d-5468),29.5305882));
+  // the "d" value of 2016-Nov-29 12:19:25 UTC = 6177.514 days
+  return ((int)fmod_pebble((d-6177.514),29.5305882));
 }
 
 void sky_paths_today(float lat, float lng, float solar_elev[], float solar_azi[], float lunar_elev[], float lunar_azi[]) {
@@ -220,6 +231,11 @@ void sky_paths_today(float lat, float lng, float solar_elev[], float solar_azi[]
   APP_LOG(APP_LOG_LEVEL_DEBUG, "Re-calculated sky paths");
 }
 
+void redo_sky_paths() {
+  // re-calculate sky paths
+  sky_paths_today(settings.Latitude, settings.Longitude, solar_elev, solar_azi, lunar_elev, lunar_azi);
+}
+
 static void load_moon_image() {
   // Get a tm structure
   time_t temp = time(NULL);
@@ -247,6 +263,17 @@ static void load_moon_image() {
   APP_LOG(APP_LOG_LEVEL_DEBUG, "Selected moon image for lunar day (moon phase 0-29) %d", lunar_day);
 }
 
+static void load_sun_image() {
+  if (curr_solar_elev <= 0) {
+    s_bitmap_sun = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_SUN_RIM);
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Selected set sun, elev = %d", (int)curr_solar_elev);
+  }
+  else {
+    s_bitmap_sun = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_SUN_RISEN);
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Selected SUN risen, elev = %d", (int)curr_solar_elev);
+  }
+}
+
 static void update_time() {
   // Get a tm structure
   time_t temp = time(NULL);
@@ -261,26 +288,51 @@ static void update_time() {
                                           "%k:%M" : "%l:%M", tick_time);
 //  strftime(s_buffer, sizeof(s_buffer), clock_is_24h_style() ?
 //                                          "%H:%M" : "%I:%M", tick_time);
-
-
+  if (s_buffer[0] == ' ') {
+    // cut the leading space
+    text_layer_set_text(s_time_layer, &(s_buffer[1]));
+  }
+  else {
+    text_layer_set_text(s_time_layer, s_buffer);
+  }
   // Display this time on the TextLayer
-  text_layer_set_text(s_time_layer, s_buffer);
   
   // Update the date text  
-  strftime(s_date_buffer, sizeof(s_date_buffer), "%Y-%b-%e", tick_time);
+  strftime(s_date_buffer, sizeof(s_date_buffer), "%a, %b %e", tick_time);
   text_layer_set_text(s_date_layer, s_date_buffer);
   
-  // Update the info text  
-  snprintf(s_info_buffer, sizeof(s_info_buffer), "S [%d|%d]", (int)curr_solar_elev, (int)curr_solar_azi);
-  text_layer_set_text(s_info_layer, s_info_buffer);
+  // Update the info text -- if we want to show information
+  if (settings.ShowInfo) {
+    switch ((tick_time->tm_min) % 3) {
+      case 0:
+        snprintf(s_info_buffer, sizeof(s_info_buffer), "Sun [%d|%d]", (int)curr_solar_elev, (int)curr_solar_azi);
+        text_layer_set_text(s_info_layer, s_info_buffer);
+        break;
+      case 1:
+        snprintf(s_info_buffer, sizeof(s_info_buffer), "Moon [%d|%d]", (int)curr_lunar_elev, (int)curr_lunar_azi);
+        text_layer_set_text(s_info_layer, s_info_buffer);
+        break;
+      case 2:
+        snprintf(s_info_buffer, sizeof(s_info_buffer), "Moon %dd old", moonPhase(temp));
+        text_layer_set_text(s_info_layer, s_info_buffer);
+        break;
+    }
+      
+  }  
+  else {
+    snprintf(s_info_buffer, sizeof(s_info_buffer), " ");
+    text_layer_set_text(s_info_layer, s_info_buffer);
+  }
 
   // if it is an hour boundary, re-calculate the sun and moon ephemeris
   if (tick_time->tm_min == 0) {
     psleep(5000); // wait 5 seconds after the hour before re-calculating
-    // re-calculate sky paths
-    sky_paths_today(lat, lng, solar_elev, solar_azi, lunar_elev, lunar_azi);
+    // re-calculate skypaths
+    redo_sky_paths();
     // load a moon image (maybe a new one)
     load_moon_image();
+    // load a sun image (maybe a new one)
+    load_sun_image();
   }
 }
 
@@ -294,10 +346,10 @@ int hour_to_xpixel (float hour) {
 }
 
 int angle_to_ypixel (float angle) {
-  // vertical = 65 degrees, with 50 on top, -15 at bottom
-  int range = (90 - lat + 23.5) * 1.35;  // full graph 135% of the potential range at that lat
+  // set y scale based upon latitude
+  int range = (90 - settings.Latitude + 23.5) * 1.35;  // full graph 135% of the potential range at that lat
   if (range>110) range = 110;
-  int top = (90 - lat + 23.5) * 1.05;  // this gives a 20% buffer below the horizon.
+  int top = (90 - settings.Latitude + 23.5) * 1.05;  // this gives a 20% buffer below the horizon.
   if (top>90) top = 90;
   return (int)((top-angle)/range * graph_height);
 }
@@ -357,7 +409,7 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
   // Get the location to place the sun
   GRect bitmap_placed = GRect(hour_to_xpixel(hour+frac_hour)-7,angle_to_ypixel(curr_elev)-6,15,13);
   // Draw the image
-  graphics_draw_bitmap_in_rect(ctx, s_bitmap_sun_rim, bitmap_placed);
+  graphics_draw_bitmap_in_rect(ctx, s_bitmap_sun, bitmap_placed);
 
 
   curr_lunar_elev = lunar_elev[hour] + frac_hour * (lunar_elev[hour+1]-lunar_elev[hour]);
@@ -376,6 +428,49 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
   // Draw the image
   graphics_draw_bitmap_in_rect(ctx, s_bitmap_moon, bitmap_moon_placed);
 
+}
+
+// code to get settings from phone via pebble-clay
+
+// Initialize the default settings
+static void prv_default_settings() {
+  settings.Latitude = 64.8;
+  settings.Longitude = -147;
+  settings.ShowInfo = true;
+}
+
+// Save the settings to persistent storage
+static void prv_save_settings() {
+  persist_write_data(SETTINGS_KEY, &settings, sizeof(settings));
+}
+
+static void prv_load_settings() {
+  // Load the default settings
+  prv_default_settings();
+  // Read settings from persistent storage, if they exist
+  persist_read_data(SETTINGS_KEY, &settings, sizeof(settings));
+}
+
+static void prv_inbox_received_handler(DictionaryIterator *iter, void *context) {
+  // Read lat / lon and other
+  Tuple *latitude_t = dict_find(iter, MESSAGE_KEY_Latitude);
+  if(latitude_t) {
+    settings.Latitude = (float)(latitude_t->value->int32);
+    redo_sky_paths();
+  }
+
+  Tuple *longitude_t = dict_find(iter, MESSAGE_KEY_Longitude);
+  if(longitude_t) {
+    settings.Longitude = (float)(longitude_t->value->int32);
+    redo_sky_paths();
+  }
+
+  // Read boolean preferences
+  Tuple *show_info_t = dict_find(iter, MESSAGE_KEY_ShowInfo);
+  if(show_info_t) {
+    settings.ShowInfo = show_info_t->value->int32 == 1;
+  }
+  prv_save_settings();
 }
 
 static void main_window_load(Window *window) {
@@ -397,7 +492,7 @@ static void main_window_load(Window *window) {
   
   // Create the TextLayer with specific bounds on bottom half of display
   s_time_layer = text_layer_create(
-      GRect(0, bounds.size.h*0.4, bounds.size.w, 45));
+      GRect(0, bounds.size.h*0.4, bounds.size.w, 43));
   
   // Improve the layout to be more like a watchface
   text_layer_set_background_color(s_time_layer, GColorBlack);
@@ -410,7 +505,7 @@ static void main_window_load(Window *window) {
   
   // Create date information layer
   s_date_layer = text_layer_create(
-    GRect(0, (bounds.size.h*0.4+45), bounds.size.w, 25));
+    GRect(0, (bounds.size.h*0.4+43), bounds.size.w, 26));
 
   // Style the text
   text_layer_set_background_color(s_date_layer, GColorBlack);
@@ -424,14 +519,14 @@ static void main_window_load(Window *window) {
 
   // Create info layer
   s_info_layer = text_layer_create(
-    GRect(0, (bounds.size.h*0.4+70), bounds.size.w, 25));
+    GRect(0, (bounds.size.h*0.4+70), bounds.size.w, 26));
 
   // Style the text
   text_layer_set_background_color(s_info_layer, GColorBlack);
   text_layer_set_text_color(s_info_layer, GColorWhite);
   text_layer_set_text_alignment(s_info_layer, GTextAlignmentCenter);
   text_layer_set_font(s_info_layer, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD));
-  text_layer_set_text(s_info_layer, "Sun Info");
+  text_layer_set_text(s_info_layer, " ");
                                      
   // Add it as a child layer to the Window's root layer
   layer_add_child(window_layer, text_layer_get_layer(s_info_layer));
@@ -448,12 +543,18 @@ static void main_window_unload(Window *window) {
   layer_destroy(s_canvas_layer);
   
   // Destroy the image data
-  gbitmap_destroy(s_bitmap_sun_rim);
+  gbitmap_destroy(s_bitmap_sun);
   gbitmap_destroy(s_bitmap_horizon);
   gbitmap_destroy(s_bitmap_moon);
 }
 
 static void init() {
+  prv_load_settings();
+  
+  // Open AppMessage connection
+  app_message_register_inbox_received(prv_inbox_received_handler);
+  app_message_open(128, 128);
+
   // Create main Window element and assign to pointer
   s_main_window = window_create();
 
@@ -476,14 +577,16 @@ static void init() {
   window_set_background_color(s_main_window, GColorBlack);
   
   // load bitmaps
-  s_bitmap_sun_rim = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_SUN_RIM);
   s_bitmap_horizon = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_HORIZON);
   
+  // calculate sun paths
+  redo_sky_paths();
+
   // get proper moon phase image
   load_moon_image();
-  
-  // calculate sun paths
-  sky_paths_today(lat, lng, solar_elev, solar_azi, lunar_elev, lunar_azi);
+
+  // get proper sun (set/risen) image
+  load_sun_image();
 }
 
 static void deinit() {

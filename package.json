@@ -1,18 +1,38 @@
 {
-    "author": "w.r.simpson@gmail.com",
-    "dependencies": {},
+    "author": "BillSimpson",
+    "dependencies": {
+        "pebble-clay": "^1.0.3"
+    },
     "keywords": [],
-    "name": "skypath",
+    "name": "ephemeris",
     "pebble": {
         "capabilities": [
-            "location"
+            "location",
+            "configurable"
         ],
-        "displayName": "SkyPath",
+        "displayName": "Ephemeris",
         "enableMultiJS": true,
-        "messageKeys": [],
+        "messageKeys": [
+            "Latitude",
+            "Longitude",
+            "ShowInfo"
+        ],
         "projectType": "native",
         "resources": {
             "media": [
+                {
+                    "file": "images/ephemeris-thumbnail.png",
+                    "menuIcon": true,
+                    "name": "IMAGE_THUMBNAIL",
+                    "targetPlatforms": null,
+                    "type": "bitmap"
+                },
+                {
+                    "file": "images/sun_risen.png",
+                    "name": "IMAGE_SUN_RISEN",
+                    "targetPlatforms": null,
+                    "type": "bitmap"
+                },
                 {
                     "file": "images/moon9.png",
                     "name": "IMAGE_MOON9",
